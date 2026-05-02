@@ -6,7 +6,6 @@ import {
   ArrowRight,
   ArrowUp,
   CalendarDays,
-  Check,
   Download,
   FileUp,
   Plus,
@@ -56,6 +55,7 @@ export function HabitTracker() {
   const [newHabitName, setNewHabitName] = useState("");
   const [newHabitThumbnail, setNewHabitThumbnail] = useState(thumbnailOptions[0].src);
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
+  const [dayOpen, setDayOpen] = useState(true);
   const [monthOpen, setMonthOpen] = useState(true);
 
   useEffect(() => {
@@ -91,7 +91,6 @@ export function HabitTracker() {
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
-    setExpandedHabitId(null);
   }, [selectedDate]);
 
   useEffect(() => {
@@ -140,10 +139,15 @@ export function HabitTracker() {
   const monthDays = useMemo(() => getMonthDays(visibleMonth), [visibleMonth]);
   const selectedRecord = tracker.days[selectedDate] ?? emptyDay;
   const completedSet = useMemo(
-    () => new Set(selectedRecord.completedHabitIds),
-    [selectedRecord.completedHabitIds]
+    () =>
+      new Set(
+        activeHabits
+          .filter((habit) => isHabitComplete(selectedRecord, habit.id))
+          .map((habit) => habit.id)
+      ),
+    [activeHabits, selectedRecord]
   );
-  const completedCount = activeHabits.filter((habit) => completedSet.has(habit.id)).length;
+  const completedCount = completedSet.size;
   const completionPercent =
     activeHabits.length > 0 ? Math.round((completedCount / activeHabits.length) * 100) : 0;
   const streak = useMemo(
@@ -155,47 +159,22 @@ export function HabitTracker() {
     [monthDays, activeHabits, tracker]
   );
 
-  const toggleCompletion = useCallback(
-    (habitId: string, dateKey = selectedDate) => {
-      commit((current) => {
-        const record = current.days[dateKey] ?? emptyDay;
-        const isDone = record.completedHabitIds.includes(habitId);
-        const completedHabitIds = isDone
-          ? record.completedHabitIds.filter((id) => id !== habitId)
-          : [...record.completedHabitIds, habitId];
-        const habitMoods = { ...(record.habitMoods ?? {}) };
-
-        if (isDone) {
-          delete habitMoods[habitId];
-        }
-
-        return {
-          ...current,
-          days: {
-            ...current.days,
-            [dateKey]: { ...record, completedHabitIds, habitMoods }
-          }
-        };
-      });
-    },
-    [commit, selectedDate]
-  );
-
   const updateHabitMood = useCallback(
     (habitId: string, mood: MoodKey) => {
       commit((current) => {
         const record = current.days[selectedDate] ?? emptyDay;
         const habitMoods = { ...(record.habitMoods ?? {}) };
+        let completedHabitIds = record.completedHabitIds;
 
         if (habitMoods[habitId] === mood) {
           delete habitMoods[habitId];
+          completedHabitIds = record.completedHabitIds.filter((id) => id !== habitId);
         } else {
           habitMoods[habitId] = mood;
+          completedHabitIds = record.completedHabitIds.includes(habitId)
+            ? record.completedHabitIds
+            : [...record.completedHabitIds, habitId];
         }
-
-        const completedHabitIds = record.completedHabitIds.includes(habitId)
-          ? record.completedHabitIds
-          : [...record.completedHabitIds, habitId];
 
         return {
           ...current,
@@ -339,11 +318,11 @@ export function HabitTracker() {
 
     const dateLabel = formatPrettyDate(selectedDate);
     const habitRows = activeHabits.slice(0, 14);
-    const completed = habitRows.filter((habit) => selectedRecord.completedHabitIds.includes(habit.id)).length;
+    const completed = habitRows.filter((habit) => isHabitComplete(selectedRecord, habit.id)).length;
     const gradient = context.createLinearGradient(0, 0, 1080, 1620);
-    gradient.addColorStop(0, "#fffafd");
-    gradient.addColorStop(0.52, "#ffe4f1");
-    gradient.addColorStop(1, "#ffd8ea");
+    gradient.addColorStop(0, "#fff3fa");
+    gradient.addColorStop(0.52, "#ffd0e8");
+    gradient.addColorStop(1, "#ffb6d8");
 
     context.fillStyle = gradient;
     context.fillRect(0, 0, 1080, 1620);
@@ -352,6 +331,10 @@ export function HabitTracker() {
     drawShareSparkle(context, 965, 128, 28, "#ff4fa3");
     drawShareSparkle(context, 930, 1470, 38, "#ffd76b");
     drawShareSparkle(context, 118, 1492, 24, "#b88cff");
+    drawShareSparkle(context, 996, 810, 18, "#83d8bc");
+    drawShareSparkle(context, 76, 760, 16, "#ff4fa3");
+    drawShareSparkle(context, 874, 356, 15, "#b88cff");
+    drawShareSparkle(context, 202, 304, 14, "#ffd76b");
 
     roundRect(context, 62, 64, 956, 1492, 44);
     context.fillStyle = "rgba(255, 250, 253, 0.9)";
@@ -377,7 +360,7 @@ export function HabitTracker() {
 
     const progressWidth = Math.round((completed / Math.max(habitRows.length, 1)) * 780);
     roundRect(context, 94, 392, 780, 22, 999);
-    context.fillStyle = "#ffe4f1";
+    context.fillStyle = "#ffd0e8";
     context.fill();
     roundRect(context, 94, 392, progressWidth, 22, 999);
     context.fillStyle = "#ff4fa3";
@@ -388,7 +371,7 @@ export function HabitTracker() {
 
     let y = 470;
     for (const habit of habitRows) {
-      const done = selectedRecord.completedHabitIds.includes(habit.id);
+      const done = isHabitComplete(selectedRecord, habit.id);
       const mood = selectedRecord.habitMoods?.[habit.id];
       const moodOption = moodOptions.find((item) => item.key === mood);
 
@@ -420,9 +403,9 @@ export function HabitTracker() {
         context.font = "900 20px Avenir Next, Trebuchet MS, Arial";
         context.fillText(moodOption.label, 852, y + 42);
       } else {
-        context.fillStyle = done ? "#ff4fa3" : "#d393b7";
+        context.fillStyle = "#d393b7";
         context.font = "900 24px Avenir Next, Trebuchet MS, Arial";
-        context.fillText(done ? "checked" : "blank", 812, y + 42);
+        context.fillText("pick mood", 812, y + 42);
       }
 
       y += 82;
@@ -484,12 +467,28 @@ export function HabitTracker() {
     const today = new Date();
     setSelectedDate(localDateKey(today));
     setVisibleMonth(startOfMonth(today));
+    setExpandedHabitId(null);
+    setDayOpen(true);
+  }, []);
+
+  const selectDay = useCallback((dateKey: string, habitId: string | null = null) => {
+    setSelectedDate(dateKey);
+    setExpandedHabitId(habitId);
+    setDayOpen(true);
   }, []);
 
   return (
     <main className="tracker-shell">
       <section className="tracker-hero" aria-labelledby="tracker-title">
         <div className="sparkle-field" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
           <span />
           <span />
           <span />
@@ -532,7 +531,7 @@ export function HabitTracker() {
       </section>
 
       <section className="dashboard-grid" aria-label="Habit tracker dashboard">
-        <section className="today-panel" aria-labelledby="today-title">
+        <section className={`today-panel${dayOpen ? " open" : " collapsed"}`} aria-labelledby="today-title">
           <LogoMark className="panel-watermark" decorative />
           <div className="section-header">
             <div className="section-title-lockup">
@@ -553,49 +552,47 @@ export function HabitTracker() {
             <StatCard label="Month" value={`${monthProgress.completed}/${monthProgress.total}`} />
           </div>
 
-          <div className="checklist" aria-label="Today's habits">
-            {activeHabits.map((habit) => {
-              const done = completedSet.has(habit.id);
-              const habitMood = selectedRecord.habitMoods?.[habit.id];
-              const moodOption = moodOptions.find((item) => item.key === habitMood);
-              const moodMenuOpen = expandedHabitId === habit.id;
-              return (
-                <article
-                  className={`habit-card${done ? " done" : ""}`}
-                  key={habit.id}
-                  style={{ "--habit": habit.color } as CSSProperties}
-                >
-                  <div className="habit-card-main">
-                    <img src={assetUrl(habit.thumbnail)} alt="" className="habit-thumb" />
-                    <div className="habit-card-copy">
-                      <h3>{habit.name}</h3>
-                      <p>{habit.quip}</p>
-                    </div>
+          <button className="day-toggle" type="button" onClick={() => setDayOpen((open) => !open)}>
+            <Sparkles size={17} aria-hidden="true" />
+            {dayOpen ? "Hide day details" : "Open day details"}
+          </button>
+
+          <div className="day-panel-content">
+            <div className="checklist" aria-label="Today's habits">
+              {activeHabits.map((habit) => {
+                const done = completedSet.has(habit.id);
+                const habitMood = selectedRecord.habitMoods?.[habit.id];
+                const moodOption = moodOptions.find((item) => item.key === habitMood);
+                const moodMenuOpen = expandedHabitId === habit.id;
+                return (
+                  <article
+                    className={`habit-card${done ? " done" : ""}${moodMenuOpen ? " expanded" : ""}`}
+                    key={habit.id}
+                    style={{ "--habit": habit.color } as CSSProperties}
+                  >
                     <button
-                      className="check-button"
-                      style={{ "--habit": habit.color } as CSSProperties}
-                      type="button"
-                      onClick={() => toggleCompletion(habit.id)}
-                      aria-label={`${done ? "Clear" : "Complete"} ${habit.name}`}
-                    >
-                      {done ? <Check size={21} aria-hidden="true" /> : null}
-                    </button>
-                  </div>
-                  <div className="activity-mood-strip">
-                    <button
-                      className={`mood-pill${moodOption ? " selected" : ""}`}
-                      style={{ "--mood": moodOption?.tone ?? habit.color } as CSSProperties}
+                      className="habit-card-main habit-expand-button"
                       type="button"
                       onClick={() => setExpandedHabitId(moodMenuOpen ? null : habit.id)}
                       aria-expanded={moodMenuOpen}
-                      aria-label={`Choose mood for ${habit.name}`}
+                      aria-label={`${moodMenuOpen ? "Close" : "Pick"} mood for ${habit.name}`}
                     >
-                      {moodOption ? (
-                        <img src={assetUrl(moodOption.src)} alt="" />
-                      ) : (
-                        <Sparkles size={16} aria-hidden="true" />
-                      )}
-                      <span>{moodOption ? moodOption.label : "Pick mood"}</span>
+                      <img src={assetUrl(habit.thumbnail)} alt="" className="habit-thumb" />
+                      <div className="habit-card-copy">
+                        <h3>{habit.name}</h3>
+                        <p>{habit.quip}</p>
+                      </div>
+                      <span
+                        className={`mood-preview${moodOption ? " selected" : ""}`}
+                        style={{ "--mood": moodOption?.tone ?? habit.color } as CSSProperties}
+                      >
+                        {moodOption ? (
+                          <img src={assetUrl(moodOption.src)} alt="" />
+                        ) : (
+                          <Sparkles size={16} aria-hidden="true" />
+                        )}
+                        <span>{moodOption ? moodOption.label : "Pick mood"}</span>
+                      </span>
                     </button>
                     {moodMenuOpen ? (
                       <div className="activity-mood-panel" aria-label={`Mood choices for ${habit.name}`}>
@@ -617,22 +614,22 @@ export function HabitTracker() {
                         ))}
                       </div>
                     ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
 
-          <label className="note-box">
-            <span>Journal note</span>
-            <textarea
-              ref={noteRef}
-              value={selectedRecord.note ?? ""}
-              onChange={(event) => updateSelectedNote(event.target.value)}
-              onInput={(event) => updateSelectedNote(event.currentTarget.value)}
-              placeholder="A tiny note from today..."
-            />
-          </label>
+            <label className="note-box">
+              <span>Journal note</span>
+              <textarea
+                ref={noteRef}
+                value={selectedRecord.note ?? ""}
+                onChange={(event) => updateSelectedNote(event.target.value)}
+                onInput={(event) => updateSelectedNote(event.currentTarget.value)}
+                placeholder="A tiny note from today..."
+              />
+            </label>
+          </div>
         </section>
 
         <section className={`month-panel${monthOpen ? " open" : " collapsed"}`} aria-labelledby="month-title">
@@ -683,7 +680,7 @@ export function HabitTracker() {
                         className={`day-header${selectedDate === dayKey ? " selected" : ""}`}
                         key={dayKey}
                         type="button"
-                        onClick={() => setSelectedDate(dayKey)}
+                        onClick={() => selectDay(dayKey)}
                       >
                         <span>{day.getDate()}</span>
                         <small>{weekdayLetter(day)}</small>
@@ -701,7 +698,7 @@ export function HabitTracker() {
                     {monthDays.map((day) => {
                       const dayKey = localDateKey(day);
                       const record = tracker.days[dayKey];
-                      const done = record?.completedHabitIds.includes(habit.id) ?? false;
+                      const done = record ? isHabitComplete(record, habit.id) : false;
                       const habitMood = record?.habitMoods?.[habit.id];
                       const moodOption = moodOptions.find((item) => item.key === habitMood);
                       return (
@@ -718,19 +715,16 @@ export function HabitTracker() {
                           }
                           type="button"
                           onClick={() => {
-                            setSelectedDate(dayKey);
-                            toggleCompletion(habit.id, dayKey);
+                            selectDay(dayKey, habit.id);
                           }}
                           aria-label={
                             moodOption
-                              ? `Clear ${habit.name} on ${dayKey}, ${moodOption.label} mood`
-                              : `${done ? "Clear" : "Complete"} ${habit.name} on ${dayKey}`
+                              ? `Edit ${habit.name} mood on ${dayKey}, currently ${moodOption.label}`
+                              : `Pick mood for ${habit.name} on ${dayKey}`
                           }
                         >
                           {moodOption ? (
                             <img className="grid-mood-img" src={assetUrl(moodOption.src)} alt="" />
-                          ) : done ? (
-                            <Check size={16} aria-hidden="true" />
                           ) : null}
                         </button>
                       );
@@ -929,9 +923,9 @@ function drawShareLogo(context: CanvasRenderingContext2D, x: number, y: number, 
   context.scale(scale, scale);
 
   const blush = context.createLinearGradient(18, 14, 104, 110);
-  blush.addColorStop(0, "#fffafd");
-  blush.addColorStop(0.46, "#ffe4f1");
-  blush.addColorStop(1, "#ff8fc2");
+  blush.addColorStop(0, "#fff3fa");
+  blush.addColorStop(0.46, "#ffd0e8");
+  blush.addColorStop(1, "#ff70b9");
   roundRect(context, 10, 10, 100, 100, 30);
   context.fillStyle = blush;
   context.fill();
@@ -964,9 +958,11 @@ function drawShareLogo(context: CanvasRenderingContext2D, x: number, y: number, 
   context.bezierCurveTo(73, 60, 84, 47, 99, 36);
   context.stroke();
 
-  drawShareSparkle(context, 28, 43, 18, "#ffd76b");
-  drawShareSparkle(context, 90, 28, 15, "#ff4fa3");
-  drawShareSparkle(context, 91, 91, 17, "#ffd76b");
+  drawShareSparkle(context, 24, 39, 21, "#ffd76b");
+  drawShareSparkle(context, 92, 25, 19, "#ff4fa3");
+  drawShareSparkle(context, 94, 91, 21, "#ffd76b");
+  drawShareSparkle(context, 18, 78, 12, "#b88cff");
+  drawShareSparkle(context, 105, 59, 11, "#83d8bc");
   context.fillStyle = "#83d8bc";
   context.beginPath();
   context.arc(31, 87, 5, 0, Math.PI * 2);
@@ -987,7 +983,12 @@ function drawShareSparkle(
 ) {
   context.save();
   context.translate(x, y);
+  context.shadowColor = color;
+  context.shadowBlur = size * 0.9;
   context.fillStyle = color;
+  context.strokeStyle = "#fffafd";
+  context.lineWidth = Math.max(3, size * 0.18);
+  context.lineJoin = "round";
   context.beginPath();
   context.moveTo(0, -size);
   context.lineTo(size * 0.26, -size * 0.26);
@@ -999,6 +1000,7 @@ function drawShareSparkle(
   context.lineTo(-size * 0.26, -size * 0.26);
   context.closePath();
   context.fill();
+  context.stroke();
   context.restore();
 }
 
@@ -1058,6 +1060,7 @@ function LogoMark({ className = "sparkle-logo", decorative = false }: { classNam
   const reactId = useId().replace(/:/g, "");
   const blushId = `${reactId}-logo-blush`;
   const ribbonId = `${reactId}-logo-ribbon`;
+  const sparkleGlowId = `${reactId}-sparkle-glow`;
 
   return (
     <svg
@@ -1069,14 +1072,27 @@ function LogoMark({ className = "sparkle-logo", decorative = false }: { classNam
     >
       <defs>
         <linearGradient id={blushId} x1="18" x2="104" y1="14" y2="110" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#fffafd" />
-          <stop offset="0.46" stopColor="#ffe4f1" />
-          <stop offset="1" stopColor="#ff8fc2" />
+          <stop stopColor="#fff3fa" />
+          <stop offset="0.46" stopColor="#ffd0e8" />
+          <stop offset="1" stopColor="#ff70b9" />
         </linearGradient>
         <linearGradient id={ribbonId} x1="30" x2="90" y1="34" y2="93" gradientUnits="userSpaceOnUse">
           <stop stopColor="#ff4fa3" />
           <stop offset="1" stopColor="#b88cff" />
         </linearGradient>
+        <filter id={sparkleGlowId} x="-45%" y="-45%" width="190%" height="190%">
+          <feGaussianBlur stdDeviation="2.8" result="blur" />
+          <feColorMatrix
+            in="blur"
+            result="glow"
+            type="matrix"
+            values="1 0 0 0 1 0 0.55 0 0 0.48 0 0 0.16 0 0.18 0 0 0 0.92 0"
+          />
+          <feMerge>
+            <feMergeNode in="glow" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
       <rect x="10" y="10" width="100" height="100" rx="30" fill={`url(#${blushId})`} />
       <path
@@ -1091,9 +1107,48 @@ function LogoMark({ className = "sparkle-logo", decorative = false }: { classNam
         strokeLinejoin="round"
         strokeWidth="7"
       />
-      <path d="M28 31 31 40 40 43 31 46 28 55 25 46 16 43 25 40Z" fill="#ffd76b" />
-      <path d="M90 18 93 25 100 28 93 31 90 38 87 31 80 28 87 25Z" fill="#ff4fa3" />
-      <path d="M91 80 94 88 102 91 94 94 91 102 88 94 80 91 88 88Z" fill="#ffd76b" />
+      <g className="logo-sparkles" filter={`url(#${sparkleGlowId})`}>
+        <path
+          className="logo-sparkle one"
+          d="M27 27 31 39 43 43 31 47 27 59 23 47 11 43 23 39Z"
+          fill="#ffd76b"
+          stroke="#fffafd"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        <path
+          className="logo-sparkle two"
+          d="M91 15 95 25 105 29 95 33 91 43 87 33 77 29 87 25Z"
+          fill="#ff4fa3"
+          stroke="#fffafd"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        <path
+          className="logo-sparkle three"
+          d="M92 77 96 89 108 93 96 97 92 109 88 97 76 93 88 89Z"
+          fill="#ffd76b"
+          stroke="#fffafd"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        <path
+          className="logo-sparkle four"
+          d="M18 72 20 78 26 80 20 82 18 88 16 82 10 80 16 78Z"
+          fill="#b88cff"
+          stroke="#fffafd"
+          strokeLinejoin="round"
+          strokeWidth="2.2"
+        />
+        <path
+          className="logo-sparkle five"
+          d="M105 52 107 58 113 60 107 62 105 68 103 62 97 60 103 58Z"
+          fill="#83d8bc"
+          stroke="#fffafd"
+          strokeLinejoin="round"
+          strokeWidth="2.2"
+        />
+      </g>
       <circle cx="31" cy="87" r="5" fill="#83d8bc" />
       <circle cx="76" cy="26" r="4" fill="#b88cff" />
     </svg>
@@ -1178,6 +1233,10 @@ function removeHabitMood(moods: DayRecord["habitMoods"], habitId: string) {
   return next;
 }
 
+function isHabitComplete(record: DayRecord, habitId: string) {
+  return Boolean(record.habitMoods?.[habitId]);
+}
+
 function localDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1236,7 +1295,7 @@ function countStreakEndingAt(dateKey: string, tracker: TrackerState, activeHabit
   while (count < 366) {
     const key = localDateKey(cursor);
     const record = tracker.days[key];
-    const completed = activeHabits.some((habit) => record?.completedHabitIds.includes(habit.id));
+    const completed = activeHabits.some((habit) => (record ? isHabitComplete(record, habit.id) : false));
 
     if (!completed) {
       break;
@@ -1259,7 +1318,7 @@ function countMonthProgress(days: Date[], activeHabits: Habit[], tracker: Tracke
 
     return (
       sum +
-      activeHabits.filter((habit) => record.completedHabitIds.includes(habit.id)).length
+      activeHabits.filter((habit) => isHabitComplete(record, habit.id)).length
     );
   }, 0);
 
