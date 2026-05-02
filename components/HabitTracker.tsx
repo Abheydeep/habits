@@ -347,7 +347,7 @@ export function HabitTracker() {
 
     context.fillStyle = "#c02d7a";
     context.font = "900 30px Avenir Next, Trebuchet MS, Arial";
-    context.fillText("made with tiny love", 246, 118);
+    context.fillText("made with all my love", 246, 118);
 
     context.fillStyle = "#51223d";
     context.font = "950 68px Arial Rounded MT Bold, Trebuchet MS, Arial";
@@ -500,7 +500,7 @@ export function HabitTracker() {
           <div className="hero-copy">
             <div className="eyebrow">
               <Sparkles size={16} aria-hidden="true" />
-              Made with tiny love
+              Made with all my love
             </div>
             <h1 id="tracker-title">Shivani's Sparkle Streak</h1>
             <p>
