@@ -54,6 +54,8 @@ export function HabitTracker() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newHabitName, setNewHabitName] = useState("");
   const [newHabitThumbnail, setNewHabitThumbnail] = useState(thumbnailOptions[0].src);
+  const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
+  const [monthOpen, setMonthOpen] = useState(true);
 
   useEffect(() => {
     const stored = readSavedTrackerState();
@@ -79,7 +81,16 @@ export function HabitTracker() {
   }, []);
 
   useEffect(() => {
+    const query = window.matchMedia("(max-width: 720px)");
+    const syncMonthState = () => setMonthOpen(!query.matches);
+    syncMonthState();
+    query.addEventListener("change", syncMonthState);
+    return () => query.removeEventListener("change", syncMonthState);
+  }, []);
+
+  useEffect(() => {
     selectedDateRef.current = selectedDate;
+    setExpandedHabitId(null);
   }, [selectedDate]);
 
   useEffect(() => {
@@ -314,14 +325,124 @@ export function HabitTracker() {
     [commit, tracker.habits]
   );
 
+  const exportShareCard = useCallback(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1620;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      window.alert("Could not create the image export.");
+      return;
+    }
+
+    const dateLabel = formatPrettyDate(selectedDate);
+    const habitRows = activeHabits.slice(0, 14);
+    const completed = habitRows.filter((habit) => selectedRecord.completedHabitIds.includes(habit.id)).length;
+    const gradient = context.createLinearGradient(0, 0, 1080, 1620);
+    gradient.addColorStop(0, "#fffafd");
+    gradient.addColorStop(0.52, "#ffe4f1");
+    gradient.addColorStop(1, "#ffd8ea");
+
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 1080, 1620);
+    drawShareGrid(context);
+    drawShareSparkle(context, 90, 98, 34, "#ffd76b");
+    drawShareSparkle(context, 965, 128, 28, "#ff4fa3");
+    drawShareSparkle(context, 930, 1470, 38, "#ffd76b");
+    drawShareSparkle(context, 118, 1492, 24, "#b88cff");
+
+    roundRect(context, 62, 64, 956, 1492, 44);
+    context.fillStyle = "rgba(255, 250, 253, 0.9)";
+    context.fill();
+    context.strokeStyle = "rgba(255, 79, 163, 0.28)";
+    context.lineWidth = 3;
+    context.stroke();
+
+    drawShareLogo(context, 92, 96, 126);
+
+    context.fillStyle = "#c02d7a";
+    context.font = "900 30px Avenir Next, Trebuchet MS, Arial";
+    context.fillText("made with tiny love", 246, 118);
+
+    context.fillStyle = "#51223d";
+    context.font = "950 68px Arial Rounded MT Bold, Trebuchet MS, Arial";
+    context.fillText("Shivani's", 244, 188);
+    context.fillText("Sparkle Streak", 244, 266);
+
+    context.fillStyle = "#7b4564";
+    context.font = "700 30px Avenir Next, Trebuchet MS, Arial";
+    context.fillText(`${dateLabel}  |  ${completed}/${habitRows.length} little wins`, 94, 360);
+
+    const progressWidth = Math.round((completed / Math.max(habitRows.length, 1)) * 780);
+    roundRect(context, 94, 392, 780, 22, 999);
+    context.fillStyle = "#ffe4f1";
+    context.fill();
+    roundRect(context, 94, 392, progressWidth, 22, 999);
+    context.fillStyle = "#ff4fa3";
+    context.fill();
+    context.fillStyle = "#51223d";
+    context.font = "950 34px Arial Rounded MT Bold, Trebuchet MS, Arial";
+    context.fillText(`${Math.round((completed / Math.max(habitRows.length, 1)) * 100)}%`, 902, 416);
+
+    let y = 470;
+    for (const habit of habitRows) {
+      const done = selectedRecord.completedHabitIds.includes(habit.id);
+      const mood = selectedRecord.habitMoods?.[habit.id];
+      const moodOption = moodOptions.find((item) => item.key === mood);
+
+      roundRect(context, 94, y, 892, 70, 22);
+      context.fillStyle = done ? colorWithAlpha(habit.color, 0.2) : "rgba(255, 250, 253, 0.82)";
+      context.fill();
+      context.strokeStyle = colorWithAlpha(habit.color, 0.42);
+      context.lineWidth = 2;
+      context.stroke();
+
+      const habitImage = await loadCanvasImage(assetUrl(habit.thumbnail));
+      if (habitImage) {
+        drawRoundedImage(context, habitImage, 112, y + 9, 52, 52, 14);
+      }
+
+      context.fillStyle = "#51223d";
+      context.font = "900 27px Arial Rounded MT Bold, Trebuchet MS, Arial";
+      context.fillText(habit.name, 184, y + 32);
+      context.fillStyle = "#8b5572";
+      context.font = "700 20px Avenir Next, Trebuchet MS, Arial";
+      context.fillText(done ? "done and dusted" : "waiting for sparkle", 184, y + 57);
+
+      if (moodOption) {
+        const moodImage = await loadCanvasImage(assetUrl(moodOption.src));
+        if (moodImage) {
+          drawRoundedImage(context, moodImage, 792, y + 10, 50, 50, 14);
+        }
+        context.fillStyle = "#51223d";
+        context.font = "900 20px Avenir Next, Trebuchet MS, Arial";
+        context.fillText(moodOption.label, 852, y + 42);
+      } else {
+        context.fillStyle = done ? "#ff4fa3" : "#d393b7";
+        context.font = "900 24px Avenir Next, Trebuchet MS, Arial";
+        context.fillText(done ? "checked" : "blank", 812, y + 42);
+      }
+
+      y += 82;
+    }
+
+    context.fillStyle = "#c02d7a";
+    context.font = "900 26px Avenir Next, Trebuchet MS, Arial";
+    context.fillText("tiny progress, soft heart, full sparkle", 94, 1512);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+    if (!blob) {
+      window.alert("Could not finish the image export.");
+      return;
+    }
+
+    downloadBlob(blob, `shivani-sparkle-streak-${selectedDate}.png`);
+  }, [activeHabits, selectedDate, selectedRecord]);
+
   const exportBackup = useCallback(() => {
     const blob = new Blob([JSON.stringify(tracker, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `shivani-sparkle-streak-${selectedDate}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `shivani-sparkle-streak-backup-${selectedDate}.json`);
   }, [selectedDate, tracker]);
 
   const importBackup = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -367,15 +488,25 @@ export function HabitTracker() {
   return (
     <main className="tracker-shell">
       <section className="tracker-hero" aria-labelledby="tracker-title">
-        <div className="hero-copy">
-          <div className="eyebrow">
-            <Sparkles size={16} aria-hidden="true" />
-            Made with tiny love
+        <div className="sparkle-field" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+
+        <div className="brand-lockup">
+          <LogoMark />
+          <div className="hero-copy">
+            <div className="eyebrow">
+              <Sparkles size={16} aria-hidden="true" />
+              Made with tiny love
+            </div>
+            <h1 id="tracker-title">Shivani's Sparkle Streak</h1>
+            <p>
+              A soft pink diary for study glow-ups, sweet routines, tiny moods, and wins worth saving.
+            </p>
           </div>
-          <h1 id="tracker-title">Shivani's Sparkle Streak</h1>
-          <p>
-            A soft pink diary for study glow-ups, sweet routines, tiny moods, and wins worth saving.
-          </p>
         </div>
 
         <div className="hero-actions" aria-label="Tracker actions">
@@ -383,7 +514,7 @@ export function HabitTracker() {
             <CalendarDays size={18} aria-hidden="true" />
             Today
           </button>
-          <button className="icon-text-button" type="button" onClick={exportBackup}>
+          <button className="icon-text-button" type="button" onClick={exportShareCard}>
             <Download size={18} aria-hidden="true" />
             Export
           </button>
@@ -421,6 +552,8 @@ export function HabitTracker() {
             {activeHabits.map((habit) => {
               const done = completedSet.has(habit.id);
               const habitMood = selectedRecord.habitMoods?.[habit.id];
+              const moodOption = moodOptions.find((item) => item.key === habitMood);
+              const moodMenuOpen = expandedHabitId === habit.id;
               return (
                 <article
                   className={`habit-card${done ? " done" : ""}`}
@@ -444,22 +577,41 @@ export function HabitTracker() {
                     </button>
                   </div>
                   <div className="activity-mood-strip">
-                    <span>Mood</span>
-                    <div className="activity-moods">
-                      {moodOptions.map((mood) => (
-                        <button
-                          className={`mood-sticker${habitMood === mood.key ? " selected" : ""}`}
-                          key={mood.key}
-                          style={{ "--mood": mood.tone } as CSSProperties}
-                          type="button"
-                          onClick={() => updateHabitMood(habit.id, mood.key)}
-                          aria-label={`${mood.label} mood for ${habit.name}`}
-                        >
-                          <img src={assetUrl(mood.src)} alt="" />
-                          <small>{mood.label}</small>
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      className={`mood-pill${moodOption ? " selected" : ""}`}
+                      style={{ "--mood": moodOption?.tone ?? habit.color } as CSSProperties}
+                      type="button"
+                      onClick={() => setExpandedHabitId(moodMenuOpen ? null : habit.id)}
+                      aria-expanded={moodMenuOpen}
+                      aria-label={`Choose mood for ${habit.name}`}
+                    >
+                      {moodOption ? (
+                        <img src={assetUrl(moodOption.src)} alt="" />
+                      ) : (
+                        <Sparkles size={16} aria-hidden="true" />
+                      )}
+                      <span>{moodOption ? moodOption.label : "Pick mood"}</span>
+                    </button>
+                    {moodMenuOpen ? (
+                      <div className="activity-mood-panel" aria-label={`Mood choices for ${habit.name}`}>
+                        {moodOptions.map((mood) => (
+                          <button
+                            className={`mood-sticker${habitMood === mood.key ? " selected" : ""}`}
+                            key={mood.key}
+                            style={{ "--mood": mood.tone } as CSSProperties}
+                            type="button"
+                            onClick={() => {
+                              updateHabitMood(habit.id, mood.key);
+                              setExpandedHabitId(null);
+                            }}
+                            aria-label={`${mood.label} mood for ${habit.name}`}
+                          >
+                            <img src={assetUrl(mood.src)} alt="" />
+                            <small>{mood.label}</small>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </article>
               );
@@ -478,7 +630,7 @@ export function HabitTracker() {
           </label>
         </section>
 
-        <section className="month-panel" aria-labelledby="month-title">
+        <section className={`month-panel${monthOpen ? " open" : " collapsed"}`} aria-labelledby="month-title">
           <div className="month-toolbar">
             <button
               className="round-button"
@@ -502,74 +654,81 @@ export function HabitTracker() {
             </button>
           </div>
 
-          <div className="month-grid-wrap" role="region" aria-label="Monthly habit grid" tabIndex={0}>
-            <div
-              className="month-grid"
-              style={{ "--day-count": monthDays.length } as CSSProperties}
-            >
-              <div className="grid-row header-row">
-                <div className="habit-sticky header-habit">Habit</div>
-                {monthDays.map((day) => {
-                  const dayKey = localDateKey(day);
-                  return (
-                    <button
-                      className={`day-header${selectedDate === dayKey ? " selected" : ""}`}
-                      key={dayKey}
-                      type="button"
-                      onClick={() => setSelectedDate(dayKey)}
-                    >
-                      <span>{day.getDate()}</span>
-                      <small>{weekdayLetter(day)}</small>
-                    </button>
-                  );
-                })}
-              </div>
+          <button className="month-toggle" type="button" onClick={() => setMonthOpen((open) => !open)}>
+            <CalendarDays size={17} aria-hidden="true" />
+            {monthOpen ? "Hide monthly grid" : "Show monthly grid"}
+          </button>
 
-              {activeHabits.map((habit) => (
-                <div className="grid-row habit-row" key={habit.id}>
-                  <div className="habit-sticky grid-habit-label">
-                    <img src={assetUrl(habit.thumbnail)} alt="" />
-                    <span>{habit.name}</span>
-                  </div>
+          <div className="month-panel-content">
+            <div className="month-grid-wrap" role="region" aria-label="Monthly habit grid" tabIndex={0}>
+              <div
+                className="month-grid"
+                style={{ "--day-count": monthDays.length } as CSSProperties}
+              >
+                <div className="grid-row header-row">
+                  <div className="habit-sticky header-habit">Habit</div>
                   {monthDays.map((day) => {
                     const dayKey = localDateKey(day);
-                    const record = tracker.days[dayKey];
-                    const done = record?.completedHabitIds.includes(habit.id) ?? false;
-                    const habitMood = record?.habitMoods?.[habit.id];
-                    const moodOption = moodOptions.find((item) => item.key === habitMood);
                     return (
                       <button
-                        className={`grid-cell${done ? " done" : ""}${moodOption ? " mooded" : ""}${
-                          selectedDate === dayKey ? " selected" : ""
-                        }`}
-                        key={`${habit.id}-${dayKey}`}
-                        style={
-                          {
-                            "--habit": habit.color,
-                            "--mood": moodOption?.tone ?? habit.color
-                          } as CSSProperties
-                        }
+                        className={`day-header${selectedDate === dayKey ? " selected" : ""}`}
+                        key={dayKey}
                         type="button"
-                        onClick={() => {
-                          setSelectedDate(dayKey);
-                          toggleCompletion(habit.id, dayKey);
-                        }}
-                        aria-label={
-                          moodOption
-                            ? `Clear ${habit.name} on ${dayKey}, ${moodOption.label} mood`
-                            : `${done ? "Clear" : "Complete"} ${habit.name} on ${dayKey}`
-                        }
+                        onClick={() => setSelectedDate(dayKey)}
                       >
-                        {moodOption ? (
-                          <img className="grid-mood-img" src={assetUrl(moodOption.src)} alt="" />
-                        ) : done ? (
-                          <Check size={16} aria-hidden="true" />
-                        ) : null}
+                        <span>{day.getDate()}</span>
+                        <small>{weekdayLetter(day)}</small>
                       </button>
                     );
                   })}
                 </div>
-              ))}
+
+                {activeHabits.map((habit) => (
+                  <div className="grid-row habit-row" key={habit.id}>
+                    <div className="habit-sticky grid-habit-label">
+                      <img src={assetUrl(habit.thumbnail)} alt="" />
+                      <span>{habit.name}</span>
+                    </div>
+                    {monthDays.map((day) => {
+                      const dayKey = localDateKey(day);
+                      const record = tracker.days[dayKey];
+                      const done = record?.completedHabitIds.includes(habit.id) ?? false;
+                      const habitMood = record?.habitMoods?.[habit.id];
+                      const moodOption = moodOptions.find((item) => item.key === habitMood);
+                      return (
+                        <button
+                          className={`grid-cell${done ? " done" : ""}${moodOption ? " mooded" : ""}${
+                            selectedDate === dayKey ? " selected" : ""
+                          }`}
+                          key={`${habit.id}-${dayKey}`}
+                          style={
+                            {
+                              "--habit": habit.color,
+                              "--mood": moodOption?.tone ?? habit.color
+                            } as CSSProperties
+                          }
+                          type="button"
+                          onClick={() => {
+                            setSelectedDate(dayKey);
+                            toggleCompletion(habit.id, dayKey);
+                          }}
+                          aria-label={
+                            moodOption
+                              ? `Clear ${habit.name} on ${dayKey}, ${moodOption.label} mood`
+                              : `${done ? "Clear" : "Complete"} ${habit.name} on ${dayKey}`
+                          }
+                        >
+                          {moodOption ? (
+                            <img className="grid-mood-img" src={assetUrl(moodOption.src)} alt="" />
+                          ) : done ? (
+                            <Check size={16} aria-hidden="true" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -690,6 +849,10 @@ export function HabitTracker() {
               <RotateCcw size={17} aria-hidden="true" />
               Reset tracker
             </button>
+            <button className="backup-button" type="button" onClick={exportBackup}>
+              <Download size={17} aria-hidden="true" />
+              Download data backup
+            </button>
           </aside>
         </div>
       ) : null}
@@ -703,6 +866,214 @@ function StatCard({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function loadCanvasImage(src: string) {
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+function drawShareGrid(context: CanvasRenderingContext2D) {
+  context.save();
+  context.strokeStyle = "rgba(255, 79, 163, 0.08)";
+  context.lineWidth = 2;
+
+  for (let y = 0; y < 1620; y += 44) {
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(1080, y);
+    context.stroke();
+  }
+
+  for (let x = 0; x < 1080; x += 44) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x, 1620);
+    context.stroke();
+  }
+
+  context.restore();
+}
+
+function drawShareLogo(context: CanvasRenderingContext2D, x: number, y: number, size: number) {
+  context.save();
+  context.translate(x, y);
+  const scale = size / 120;
+  context.scale(scale, scale);
+
+  const blush = context.createLinearGradient(18, 14, 104, 110);
+  blush.addColorStop(0, "#fffafd");
+  blush.addColorStop(0.46, "#ffe4f1");
+  blush.addColorStop(1, "#ff8fc2");
+  roundRect(context, 10, 10, 100, 100, 30);
+  context.fillStyle = blush;
+  context.fill();
+  context.strokeStyle = "rgba(255, 79, 163, 0.35)";
+  context.lineWidth = 2;
+  context.stroke();
+
+  const ribbon = context.createLinearGradient(30, 34, 90, 93);
+  ribbon.addColorStop(0, "#ff4fa3");
+  ribbon.addColorStop(1, "#b88cff");
+  context.fillStyle = ribbon;
+  context.beginPath();
+  context.moveTo(37, 67);
+  context.bezierCurveTo(46, 43, 68, 36, 87, 39);
+  context.bezierCurveTo(80, 45, 75, 53, 73, 62);
+  context.bezierCurveTo(81, 60, 88, 61, 94, 65);
+  context.bezierCurveTo(77, 71, 66, 82, 60, 98);
+  context.bezierCurveTo(54, 89, 46, 83, 36, 79);
+  context.bezierCurveTo(44, 77, 51, 73, 57, 67);
+  context.bezierCurveTo(49, 65, 42, 65, 37, 67);
+  context.fill();
+
+  context.strokeStyle = "#fffafd";
+  context.lineWidth = 7;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.beginPath();
+  context.moveTo(36, 55);
+  context.bezierCurveTo(45, 61, 54, 68, 63, 79);
+  context.bezierCurveTo(73, 60, 84, 47, 99, 36);
+  context.stroke();
+
+  drawShareSparkle(context, 28, 43, 18, "#ffd76b");
+  drawShareSparkle(context, 90, 28, 15, "#ff4fa3");
+  drawShareSparkle(context, 91, 91, 17, "#ffd76b");
+  context.fillStyle = "#83d8bc";
+  context.beginPath();
+  context.arc(31, 87, 5, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#b88cff";
+  context.beginPath();
+  context.arc(76, 26, 4, 0, Math.PI * 2);
+  context.fill();
+  context.restore();
+}
+
+function drawShareSparkle(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  color: string
+) {
+  context.save();
+  context.translate(x, y);
+  context.fillStyle = color;
+  context.beginPath();
+  context.moveTo(0, -size);
+  context.lineTo(size * 0.26, -size * 0.26);
+  context.lineTo(size, 0);
+  context.lineTo(size * 0.26, size * 0.26);
+  context.lineTo(0, size);
+  context.lineTo(-size * 0.26, size * 0.26);
+  context.lineTo(-size, 0);
+  context.lineTo(-size * 0.26, -size * 0.26);
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
+function drawRoundedImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  context.save();
+  roundRect(context, x, y, width, height, radius);
+  context.clip();
+  context.drawImage(image, x, y, width, height);
+  context.restore();
+}
+
+function roundRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.arcTo(x + width, y, x + width, y + height, safeRadius);
+  context.arcTo(x + width, y + height, x, y + height, safeRadius);
+  context.arcTo(x, y + height, x, y, safeRadius);
+  context.arcTo(x, y, x + width, y, safeRadius);
+  context.closePath();
+}
+
+function colorWithAlpha(hex: string, alpha: number) {
+  const fallback = `rgba(255, 79, 163, ${alpha})`;
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+
+  if (!match) {
+    return fallback;
+  }
+
+  const red = parseInt(match[1], 16);
+  const green = parseInt(match[2], 16);
+  const blue = parseInt(match[3], 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function LogoMark() {
+  return (
+    <svg className="sparkle-logo" viewBox="0 0 120 120" role="img" aria-label="Sparkle Streak logo">
+      <defs>
+        <linearGradient id="logo-blush" x1="18" x2="104" y1="14" y2="110" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#fffafd" />
+          <stop offset="0.46" stopColor="#ffe4f1" />
+          <stop offset="1" stopColor="#ff8fc2" />
+        </linearGradient>
+        <linearGradient id="logo-ribbon" x1="30" x2="90" y1="34" y2="93" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#ff4fa3" />
+          <stop offset="1" stopColor="#b88cff" />
+        </linearGradient>
+      </defs>
+      <rect x="10" y="10" width="100" height="100" rx="30" fill="url(#logo-blush)" />
+      <path
+        d="M37 67c9-24 31-31 50-28-7 6-12 14-14 23 8-2 15-1 21 3-17 6-28 17-34 33-6-9-14-15-24-19 8-2 15-6 21-12-8-2-15-2-20 0Z"
+        fill="url(#logo-ribbon)"
+      />
+      <path
+        d="M36 55c9 6 18 13 27 24 10-19 21-32 36-43"
+        fill="none"
+        stroke="#fffafd"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="7"
+      />
+      <path d="M28 31 31 40 40 43 31 46 28 55 25 46 16 43 25 40Z" fill="#ffd76b" />
+      <path d="M90 18 93 25 100 28 93 31 90 38 87 31 80 28 87 25Z" fill="#ff4fa3" />
+      <path d="M91 80 94 88 102 91 94 94 91 102 88 94 80 91 88 88Z" fill="#ffd76b" />
+      <circle cx="31" cy="87" r="5" fill="#83d8bc" />
+      <circle cx="76" cy="26" r="4" fill="#b88cff" />
+    </svg>
   );
 }
 

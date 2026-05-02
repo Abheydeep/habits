@@ -1,6 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Pink habit tracker">
-  <rect width="96" height="96" rx="22" fill="#fff1f8"/>
-  <rect x="18" y="18" width="60" height="60" rx="16" fill="#ff4fa3"/>
-  <path d="M30 49.5 42.2 61 67 34" fill="none" stroke="#fffafd" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M26 24c5.5-8 13.5-8 18 0 5-8 13-8 18 0" fill="none" stroke="#ffd76b" stroke-width="5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Shivani's Sparkle Streak logo">
+  <defs>
+    <linearGradient id="blush" x1="12" x2="86" y1="8" y2="91" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffafd"/>
+      <stop offset=".5" stop-color="#ffe4f1"/>
+      <stop offset="1" stop-color="#ff8fc2"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="24" x2="76" y1="28" y2="76" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff4fa3"/>
+      <stop offset="1" stop-color="#b88cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="url(#blush)"/>
+  <path d="M29.5 54.5c7.4-19.7 25.4-25.5 41-23-5.7 5-9.8 11.5-11.5 18.9 6.6-1.6 12.3-.8 17.2 2.5C62.3 57.8 53.3 66.8 48.4 80c-4.9-7.4-11.5-12.3-19.7-15.6 6.6-1.6 12.3-4.9 17.2-9.8-6.6-1.8-12.3-1.8-16.4-.1Z" fill="url(#ribbon)"/>
+  <path d="M29 44.5c7.4 4.9 14.8 10.7 22.2 19.7C59.4 48.6 68.4 38 80.7 29" fill="none" stroke="#fffafd" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m20 22 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z" fill="#ffd76b"/>
+  <path d="m75 12 2.5 6.5L84 21l-6.5 2.5L75 30l-2.5-6.5L66 21l6.5-2.5Z" fill="#ff4fa3"/>
+  <path d="m76 70 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z" fill="#ffd76b"/>
+  <circle cx="25" cy="75" r="4" fill="#83d8bc"/>
+  <circle cx="61" cy="19" r="3.5" fill="#b88cff"/>
 </svg>
