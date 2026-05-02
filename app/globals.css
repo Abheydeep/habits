@@ -220,16 +220,47 @@ img {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 118px minmax(0, 1fr);
+  grid-template-columns: 214px minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   min-width: 0;
+}
+
+.profile-visual {
+  position: relative;
+  display: grid;
+  grid-template-columns: 92px 128px;
+  align-items: center;
+  min-height: 142px;
 }
 
 .sparkle-logo {
   width: 118px;
   aspect-ratio: 1;
   filter: drop-shadow(0 16px 26px rgba(255, 79, 163, 0.36));
+}
+
+.profile-logo {
+  position: relative;
+  z-index: 2;
+  width: 98px;
+  transform: rotate(-5deg);
+}
+
+.profile-portrait {
+  position: relative;
+  z-index: 1;
+  width: 132px;
+  aspect-ratio: 1;
+  margin-left: -10px;
+  border: 5px solid #fffafd;
+  border-radius: 30px;
+  object-fit: cover;
+  box-shadow:
+    0 18px 34px rgba(191, 34, 119, 0.22),
+    0 0 0 2px rgba(255, 79, 163, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+  transform: rotate(2deg);
 }
 
 .logo-sparkle {
@@ -673,6 +704,10 @@ img {
     display: none;
   }
 
+  .habit-card.expanded .clinic-log-panel {
+    grid-column: 1 / -1;
+  }
+
   .habit-card.expanded .activity-mood-panel {
     margin-top: 0;
     align-self: stretch;
@@ -733,6 +768,67 @@ img {
   color: #9a4770;
   font-size: 0.8rem;
   line-height: 1.35;
+}
+
+.clinic-log-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(104px, 0.72fr) minmax(0, 1.28fr);
+  gap: 8px;
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px dashed color-mix(in srgb, var(--habit) 48%, white);
+  border-radius: 8px;
+  background: rgba(255, 250, 253, 0.74);
+}
+
+.clinic-hours-field {
+  display: grid;
+  gap: 5px;
+}
+
+.clinic-hours-field span {
+  color: #9a3470;
+  font-size: 0.68rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.clinic-hours-field input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(255, 79, 163, 0.28);
+  border-radius: 8px;
+  background: #fffafd;
+  color: #641545;
+  outline: none;
+  padding: 0 10px;
+  font-weight: 950;
+}
+
+.clinic-session-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+}
+
+.clinic-session-grid button {
+  min-height: 38px;
+  border: 1px solid rgba(255, 79, 163, 0.24);
+  border-radius: 999px;
+  background: #fff4fa;
+  color: #7b285a;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.clinic-session-grid button.selected {
+  border-color: color-mix(in srgb, var(--habit) 64%, #ff4fa3);
+  background: color-mix(in srgb, var(--habit) 22%, white);
+  color: #641545;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--habit) 22%, transparent);
 }
 
 .grid-cell.done {
@@ -1966,12 +2062,28 @@ img {
   }
 
   .brand-lockup {
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: 126px minmax(0, 1fr);
     gap: 11px;
   }
 
   .sparkle-logo {
     width: 72px;
+  }
+
+  .profile-visual {
+    grid-template-columns: 54px 80px;
+    min-height: 92px;
+  }
+
+  .profile-logo {
+    width: 60px;
+  }
+
+  .profile-portrait {
+    width: 86px;
+    margin-left: -8px;
+    border-width: 3px;
+    border-radius: 22px;
   }
 
   .tracker-hero p {
@@ -2067,6 +2179,20 @@ img {
     padding: 6px;
   }
 
+  .clinic-log-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .clinic-session-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .clinic-session-grid button {
+    min-height: 36px;
+    font-size: 0.66rem;
+    padding: 0 4px;
+  }
+
   .habit-card.expanded {
     display: grid;
     grid-template-columns: minmax(82px, 0.46fr) minmax(128px, 1fr);
@@ -2090,6 +2216,10 @@ img {
 
   .habit-card.expanded .mood-preview {
     display: none;
+  }
+
+  .habit-card.expanded .clinic-log-panel {
+    grid-column: 1 / -1;
   }
 
   .habit-card.expanded .activity-mood-panel {

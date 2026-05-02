@@ -26,23 +26,29 @@ import {
   type CSSProperties
 } from "react";
 import {
-  STORAGE_KEY,
   assetUrl,
   createDefaultState,
+  defaultProfile,
   isTrackerState,
   moodOptions,
   normalizeImportedState,
   thumbnailOptions,
+  type ClinicLog,
+  type ClinicSession,
   type DayRecord,
   type Habit,
   type MoodKey,
+  type TrackerProfile,
   type TrackerState
 } from "../lib/habitData";
 
 const colorPalette = ["#ff4fa3", "#b88cff", "#83d8bc", "#ffd76b", "#ff9bbd", "#73c7f4"];
-const COOKIE_KEY = "habit_tracker_v1";
-const HISTORY_STATE_KEY = "habitTrackerStateV1";
 const emptyDay: DayRecord = { completedHabitIds: [], habitMoods: {} };
+const clinicSessionOptions: Array<{ key: ClinicSession; label: string }> = [
+  { key: "morning", label: "Morning" },
+  { key: "afternoon", label: "Afternoon" },
+  { key: "evening", label: "Evening" }
+];
 
 type CompletionCelebration = {
   id: number;
@@ -52,8 +58,12 @@ type CompletionCelebration = {
   message: string;
 };
 
-export function HabitTracker() {
-  const [tracker, setTracker] = useState<TrackerState>(() => createDefaultState());
+type HabitTrackerProps = {
+  profile?: TrackerProfile;
+};
+
+export function HabitTracker({ profile = defaultProfile }: HabitTrackerProps) {
+  const [tracker, setTracker] = useState<TrackerState>(() => createDefaultState(profile));
   const trackerRef = useRef(tracker);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey(new Date()));
   const selectedDateRef = useRef(selectedDate);
@@ -69,27 +79,31 @@ export function HabitTracker() {
   const celebrationTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const stored = readSavedTrackerState();
+    const stored = readSavedTrackerState(profile);
+    let nextTracker = createDefaultState(profile);
 
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as unknown;
         if (isTrackerState(parsed)) {
-          const storedTracker = normalizeImportedState(parsed);
-          trackerRef.current = storedTracker;
-          setTracker(storedTracker);
+          nextTracker = normalizeImportedState(parsed, profile);
         }
       } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem(profile.storageKey);
       }
     }
+
+    trackerRef.current = nextTracker;
+    setTracker(nextTracker);
+    saveTrackerState(nextTracker, profile);
+    setNewHabitThumbnail(profile.defaultHabits[0]?.thumbnail ?? thumbnailOptions[0].src);
 
     const today = new Date();
     const todayKey = localDateKey(today);
     selectedDateRef.current = todayKey;
     setSelectedDate(todayKey);
     setVisibleMonth(startOfMonth(today));
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 720px)");
@@ -128,7 +142,7 @@ export function HabitTracker() {
         };
       }
 
-      saveTrackerState(trackerRef.current);
+      saveTrackerState(trackerRef.current, profile);
     };
     window.addEventListener("pagehide", persistLatest);
     window.addEventListener("beforeunload", persistLatest);
@@ -139,15 +153,15 @@ export function HabitTracker() {
       window.removeEventListener("beforeunload", persistLatest);
       document.removeEventListener("visibilitychange", persistLatest);
     };
-  }, []);
+  }, [profile]);
 
   const commit = useCallback((recipe: (current: TrackerState) => TrackerState) => {
     const next = recipe(trackerRef.current);
     const stamped = { ...next, updatedAt: new Date().toISOString() };
     trackerRef.current = stamped;
-    saveTrackerState(stamped);
+    saveTrackerState(stamped, profile);
     setTracker(stamped);
-  }, []);
+  }, [profile]);
 
   const sortedHabits = useMemo(
     () => [...tracker.habits].sort((a, b) => a.order - b.order),
@@ -258,6 +272,47 @@ export function HabitTracker() {
     [commit, selectedDate]
   );
 
+  const updateClinicHours = useCallback(
+    (habitId: string, value: string) => {
+      commit((current) => {
+        const record = current.days[selectedDate] ?? emptyDay;
+        const currentLog = record.clinicLogs?.[habitId] ?? { sessions: [] };
+        const parsed = Number(value);
+        const hours = value === "" || !Number.isFinite(parsed) ? undefined : Math.max(0, parsed);
+
+        return {
+          ...current,
+          days: {
+            ...current.days,
+            [selectedDate]: applyClinicLog(record, habitId, { ...currentLog, hours })
+          }
+        };
+      });
+    },
+    [commit, selectedDate]
+  );
+
+  const toggleClinicSession = useCallback(
+    (habitId: string, session: ClinicSession) => {
+      commit((current) => {
+        const record = current.days[selectedDate] ?? emptyDay;
+        const currentLog = record.clinicLogs?.[habitId] ?? { sessions: [] };
+        const sessions = currentLog.sessions.includes(session)
+          ? currentLog.sessions.filter((item) => item !== session)
+          : [...currentLog.sessions, session];
+
+        return {
+          ...current,
+          days: {
+            ...current.days,
+            [selectedDate]: applyClinicLog(record, habitId, { ...currentLog, sessions })
+          }
+        };
+      });
+    },
+    [commit, selectedDate]
+  );
+
   const addHabit = useCallback(() => {
     const name = newHabitName.trim();
     if (!name) {
@@ -344,7 +399,8 @@ export function HabitTracker() {
             {
               ...record,
               completedHabitIds: record.completedHabitIds.filter((id) => id !== habitId),
-              habitMoods: removeHabitMood(record.habitMoods, habitId)
+              habitMoods: removeHabitMood(record.habitMoods, habitId),
+              clinicLogs: removeClinicLog(record.clinicLogs, habitId)
             }
           ])
         );
@@ -401,12 +457,12 @@ export function HabitTracker() {
 
     context.fillStyle = "#c02d7a";
     context.font = "900 30px Avenir Next, Trebuchet MS, Arial";
-    context.fillText("made with all my love", 246, 118);
+    context.fillText(profile.shareKicker, 246, 118);
 
     context.fillStyle = "#51223d";
     context.font = "950 68px Arial Rounded MT Bold, Trebuchet MS, Arial";
-    context.fillText("Shivani's", 244, 188);
-    context.fillText("Sparkle Streak", 244, 266);
+    context.fillText(profile.shareTitleLines[0], 244, 188);
+    context.fillText(profile.shareTitleLines[1], 244, 266);
 
     context.fillStyle = "#7b4564";
     context.font = "700 30px Avenir Next, Trebuchet MS, Arial";
@@ -428,6 +484,7 @@ export function HabitTracker() {
       const done = isHabitComplete(selectedRecord, habit.id);
       const mood = selectedRecord.habitMoods?.[habit.id];
       const moodOption = moodOptions.find((item) => item.key === mood);
+      const clinicSummary = getClinicLogSummary(selectedRecord.clinicLogs?.[habit.id]);
 
       roundRect(context, 94, y, 892, 70, 22);
       context.fillStyle = done ? colorWithAlpha(habit.color, 0.2) : "rgba(255, 250, 253, 0.82)";
@@ -446,7 +503,7 @@ export function HabitTracker() {
       context.fillText(habit.name, 184, y + 32);
       context.fillStyle = "#8b5572";
       context.font = "700 20px Avenir Next, Trebuchet MS, Arial";
-      context.fillText(done ? "done and dusted" : "waiting for sparkle", 184, y + 57);
+      context.fillText(done ? clinicSummary ?? "done and dusted" : "waiting for sparkle", 184, y + 57);
 
       if (moodOption) {
         const moodImage = await loadCanvasImage(assetUrl(moodOption.src));
@@ -456,6 +513,10 @@ export function HabitTracker() {
         context.fillStyle = "#51223d";
         context.font = "900 20px Avenir Next, Trebuchet MS, Arial";
         context.fillText(moodOption.label, 852, y + 42);
+      } else if (clinicSummary) {
+        context.fillStyle = "#51223d";
+        context.font = "900 20px Avenir Next, Trebuchet MS, Arial";
+        context.fillText(clinicSummary, 792, y + 42);
       } else {
         context.fillStyle = "#d393b7";
         context.font = "900 24px Avenir Next, Trebuchet MS, Arial";
@@ -467,7 +528,7 @@ export function HabitTracker() {
 
     context.fillStyle = "#c02d7a";
     context.font = "900 26px Avenir Next, Trebuchet MS, Arial";
-    context.fillText("tiny progress, soft heart, full sparkle", 94, 1512);
+    context.fillText(profile.shareFooter, 94, 1512);
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
     if (!blob) {
@@ -475,13 +536,13 @@ export function HabitTracker() {
       return;
     }
 
-    downloadBlob(blob, `shivani-sparkle-streak-${selectedDate}.png`);
-  }, [activeHabits, selectedDate, selectedRecord]);
+    downloadBlob(blob, `${profile.fileSlug}-${selectedDate}.png`);
+  }, [activeHabits, profile, selectedDate, selectedRecord]);
 
   const exportBackup = useCallback(() => {
     const blob = new Blob([JSON.stringify(tracker, null, 2)], { type: "application/json" });
-    downloadBlob(blob, `shivani-sparkle-streak-backup-${selectedDate}.json`);
-  }, [selectedDate, tracker]);
+    downloadBlob(blob, `${profile.fileSlug}-backup-${selectedDate}.json`);
+  }, [profile.fileSlug, selectedDate, tracker]);
 
   const importBackup = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -498,24 +559,24 @@ export function HabitTracker() {
         return;
       }
 
-      const imported = normalizeImportedState(parsed);
+      const imported = normalizeImportedState(parsed, profile);
       trackerRef.current = imported;
       setTracker(imported);
-      saveTrackerState(imported);
+      saveTrackerState(imported, profile);
     } catch {
       window.alert("I could not read that backup file.");
     }
-  }, []);
+  }, [profile]);
 
   const resetTracker = useCallback(() => {
     const confirmed = window.confirm("Reset all habits, marks, moods, and notes?");
     if (confirmed) {
-      const next = createDefaultState();
+      const next = createDefaultState(profile);
       trackerRef.current = next;
       setTracker(next);
-      saveTrackerState(next);
+      saveTrackerState(next, profile);
     }
-  }, []);
+  }, [profile]);
 
   const selectToday = useCallback(() => {
     const today = new Date();
@@ -550,16 +611,17 @@ export function HabitTracker() {
         </div>
 
         <div className="brand-lockup">
-          <LogoMark />
+          <div className="profile-visual">
+            <LogoMark className="sparkle-logo profile-logo" />
+            <img className="profile-portrait" src={assetUrl(profile.portrait)} alt={`${profile.owner}'s portrait`} />
+          </div>
           <div className="hero-copy">
             <div className="eyebrow">
               <Sparkles size={16} aria-hidden="true" />
-              Made with all my love
+              {profile.eyebrow}
             </div>
-            <h1 id="tracker-title">Shivani's Sparkle Streak</h1>
-            <p>
-              A soft pink diary for study glow-ups, sweet routines, tiny moods, and wins worth saving.
-            </p>
+            <h1 id="tracker-title">{profile.title}</h1>
+            <p>{profile.description}</p>
           </div>
         </div>
 
@@ -618,6 +680,8 @@ export function HabitTracker() {
                 const habitMood = selectedRecord.habitMoods?.[habit.id];
                 const moodOption = moodOptions.find((item) => item.key === habitMood);
                 const moodMenuOpen = expandedHabitId === habit.id;
+                const clinicLog = selectedRecord.clinicLogs?.[habit.id];
+                const clinicSummary = getClinicLogSummary(clinicLog);
                 return (
                   <article
                     className={`habit-card${done ? " done" : ""}${moodMenuOpen ? " expanded" : ""}${
@@ -639,7 +703,7 @@ export function HabitTracker() {
                         <p>{habit.quip}</p>
                       </div>
                       <span
-                        className={`mood-preview${moodOption ? " selected" : ""}`}
+                        className={`mood-preview${moodOption || clinicSummary ? " selected" : ""}`}
                         style={{ "--mood": moodOption?.tone ?? habit.color } as CSSProperties}
                       >
                         {moodOption ? (
@@ -647,9 +711,17 @@ export function HabitTracker() {
                         ) : (
                           <Sparkles size={16} aria-hidden="true" />
                         )}
-                        <span>{moodOption ? moodOption.label : "Pick mood"}</span>
+                        <span>{moodOption ? moodOption.label : clinicSummary ?? "Pick mood"}</span>
                       </span>
                     </button>
+                    {habit.kind === "clinic" ? (
+                      <ClinicLogPanel
+                        habit={habit}
+                        log={clinicLog}
+                        onHoursChange={updateClinicHours}
+                        onSessionToggle={toggleClinicSession}
+                      />
+                    ) : null}
                     {moodMenuOpen ? (
                       <div className="activity-mood-panel" aria-label={`Mood choices for ${habit.name}`}>
                         {moodOptions.map((mood) => (
@@ -688,13 +760,13 @@ export function HabitTracker() {
             </div>
 
             <label className="note-box">
-              <span>Journal note</span>
+              <span>{profile.noteLabel}</span>
               <textarea
                 ref={noteRef}
                 value={selectedRecord.note ?? ""}
                 onChange={(event) => updateSelectedNote(event.target.value)}
                 onInput={(event) => updateSelectedNote(event.currentTarget.value)}
-                placeholder="A tiny note from today..."
+                placeholder={profile.notePlaceholder}
               />
             </label>
           </div>
@@ -940,6 +1012,55 @@ function StatCard({ label, value }: { label: string; value: string }) {
     <div className="stat-card">
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ClinicLogPanel({
+  habit,
+  log,
+  onHoursChange,
+  onSessionToggle
+}: {
+  habit: Habit;
+  log: ClinicLog | undefined;
+  onHoursChange: (habitId: string, value: string) => void;
+  onSessionToggle: (habitId: string, session: ClinicSession) => void;
+}) {
+  const hoursValue = typeof log?.hours === "number" && log.hours > 0 ? String(log.hours) : "";
+
+  return (
+    <div className="clinic-log-panel">
+      <label className="clinic-hours-field">
+        <span>Clinic hours</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          max="24"
+          step="0.25"
+          value={hoursValue}
+          onChange={(event) => onHoursChange(habit.id, event.target.value)}
+          placeholder="0"
+          aria-label={`Clinic hours for ${habit.name}`}
+        />
+      </label>
+      <div className="clinic-session-grid" aria-label={`Clinic visit times for ${habit.name}`}>
+        {clinicSessionOptions.map((session) => {
+          const selected = Boolean(log?.sessions.includes(session.key));
+          return (
+            <button
+              className={selected ? "selected" : ""}
+              key={session.key}
+              type="button"
+              onClick={() => onSessionToggle(habit.id, session.key)}
+              aria-pressed={selected}
+            >
+              {session.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1246,43 +1367,47 @@ function LogoMark({ className = "sparkle-logo", decorative = false }: { classNam
   );
 }
 
-function saveTrackerState(state: TrackerState) {
+function saveTrackerState(state: TrackerState, profile: TrackerProfile) {
   if (typeof window !== "undefined") {
     const serialized = JSON.stringify(state);
-    window.localStorage.setItem(STORAGE_KEY, serialized);
-    saveCookieBackup(serialized);
-    saveHistoryBackup(serialized);
+    window.localStorage.setItem(profile.storageKey, serialized);
+    saveCookieBackup(serialized, profile.cookieKey);
+    saveHistoryBackup(serialized, profile.historyStateKey);
   }
 }
 
-function readSavedTrackerState() {
+function readSavedTrackerState(profile: TrackerProfile) {
   if (typeof window === "undefined") {
     return null;
   }
 
-  return window.localStorage.getItem(STORAGE_KEY) ?? readCookieBackup() ?? readHistoryBackup();
+  return (
+    window.localStorage.getItem(profile.storageKey) ??
+    readCookieBackup(profile.cookieKey) ??
+    readHistoryBackup(profile.historyStateKey)
+  );
 }
 
-function saveHistoryBackup(serialized: string) {
+function saveHistoryBackup(serialized: string, historyStateKey: string) {
   const currentState = typeof window.history.state === "object" && window.history.state !== null ? window.history.state : {};
-  window.history.replaceState({ ...currentState, [HISTORY_STATE_KEY]: serialized }, "", window.location.href);
+  window.history.replaceState({ ...currentState, [historyStateKey]: serialized }, "", window.location.href);
 }
 
-function readHistoryBackup() {
+function readHistoryBackup(historyStateKey: string) {
   const currentState = window.history.state as Record<string, unknown> | null;
-  const stored = currentState?.[HISTORY_STATE_KEY];
+  const stored = currentState?.[historyStateKey];
   return typeof stored === "string" ? stored : null;
 }
 
-function saveCookieBackup(serialized: string) {
+function saveCookieBackup(serialized: string, cookieKey: string) {
   const encoded = encodeURIComponent(serialized);
   const chunkSize = 3400;
   const chunks = encoded.match(new RegExp(`.{1,${chunkSize}}`, "g")) ?? [""];
-  const existingParts = Number(getCookie(`${COOKIE_KEY}_parts`) ?? 0);
+  const existingParts = Number(getCookie(`${cookieKey}_parts`) ?? 0);
   const maxParts = Math.max(existingParts, chunks.length);
 
   for (let index = 0; index < maxParts; index += 1) {
-    const name = `${COOKIE_KEY}_${index}`;
+    const name = `${cookieKey}_${index}`;
     if (index < chunks.length) {
       document.cookie = `${name}=${chunks[index]}; Max-Age=31536000; path=/; SameSite=Lax`;
     } else {
@@ -1290,17 +1415,17 @@ function saveCookieBackup(serialized: string) {
     }
   }
 
-  document.cookie = `${COOKIE_KEY}_parts=${chunks.length}; Max-Age=31536000; path=/; SameSite=Lax`;
+  document.cookie = `${cookieKey}_parts=${chunks.length}; Max-Age=31536000; path=/; SameSite=Lax`;
 }
 
-function readCookieBackup() {
-  const parts = Number(getCookie(`${COOKIE_KEY}_parts`) ?? 0);
+function readCookieBackup(cookieKey: string) {
+  const parts = Number(getCookie(`${cookieKey}_parts`) ?? 0);
 
   if (!Number.isFinite(parts) || parts <= 0) {
     return null;
   }
 
-  const encoded = Array.from({ length: parts }, (_, index) => getCookie(`${COOKIE_KEY}_${index}`) ?? "").join("");
+  const encoded = Array.from({ length: parts }, (_, index) => getCookie(`${cookieKey}_${index}`) ?? "").join("");
 
   try {
     return decodeURIComponent(encoded);
@@ -1324,13 +1449,66 @@ function removeHabitMood(moods: DayRecord["habitMoods"], habitId: string) {
   return next;
 }
 
+function removeClinicLog(logs: DayRecord["clinicLogs"], habitId: string) {
+  const next = { ...(logs ?? {}) };
+  delete next[habitId];
+  return next;
+}
+
+function applyClinicLog(record: DayRecord, habitId: string, log: ClinicLog): DayRecord {
+  const cleanLog: ClinicLog = {
+    hours: typeof log.hours === "number" && log.hours > 0 ? log.hours : undefined,
+    sessions: [...new Set(log.sessions)]
+  };
+  const clinicLogs = { ...(record.clinicLogs ?? {}) };
+  let completedHabitIds = record.completedHabitIds.filter((id) => id !== habitId);
+
+  if (isClinicLogComplete(cleanLog)) {
+    clinicLogs[habitId] = cleanLog;
+    completedHabitIds = [...completedHabitIds, habitId];
+  } else {
+    delete clinicLogs[habitId];
+  }
+
+  return { ...record, completedHabitIds, clinicLogs };
+}
+
 function isHabitComplete(record: DayRecord, habitId: string) {
   const status = record.habitMoods?.[habitId];
-  return Boolean(status && isCompletionMood(status));
+  return Boolean((status && isCompletionMood(status)) || isClinicLogComplete(record.clinicLogs?.[habitId]));
 }
 
 function isCompletionMood(status: MoodKey) {
   return Boolean(status);
+}
+
+function isClinicLogComplete(log: ClinicLog | undefined) {
+  return Boolean(log && ((typeof log.hours === "number" && log.hours > 0) || log.sessions.length > 0));
+}
+
+function getClinicLogSummary(log: ClinicLog | undefined) {
+  if (!isClinicLogComplete(log)) {
+    return null;
+  }
+
+  const parts: string[] = [];
+
+  if (typeof log?.hours === "number" && log.hours > 0) {
+    const hours = Number.isInteger(log.hours)
+      ? log.hours.toFixed(0)
+      : log.hours.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+    parts.push(`${hours}h`);
+  }
+
+  const shortSessions = log?.sessions
+    .map((session) => (session === "morning" ? "M" : session === "afternoon" ? "A" : "E"))
+    .join("/");
+
+  if (shortSessions) {
+    parts.push(shortSessions);
+  }
+
+  return parts.join(" • ");
 }
 
 function playCompletionSound(tone: string) {
