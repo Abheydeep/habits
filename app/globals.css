@@ -646,6 +646,47 @@ img {
   box-shadow: 0 16px 34px rgba(255, 79, 163, 0.2);
 }
 
+@media (min-width: 721px) {
+  .habit-card.expanded {
+    display: grid;
+    grid-template-columns: minmax(88px, 0.36fr) minmax(226px, 1fr);
+    align-items: stretch;
+    column-gap: 10px;
+  }
+
+  .habit-card.expanded .habit-card-main {
+    grid-template-columns: 1fr;
+    place-items: center;
+    min-height: 100%;
+    padding-right: 0;
+  }
+
+  .habit-card.expanded .habit-card-copy {
+    display: none;
+  }
+
+  .habit-card.expanded .habit-thumb {
+    width: clamp(68px, 7vw, 84px);
+  }
+
+  .habit-card.expanded .mood-preview {
+    display: none;
+  }
+
+  .habit-card.expanded .activity-mood-panel {
+    margin-top: 0;
+    align-self: stretch;
+    grid-template-columns: repeat(5, minmax(38px, 1fr));
+    place-content: center;
+    padding: 7px;
+  }
+
+  .habit-card.expanded .mood-sticker {
+    min-height: 58px;
+    padding-inline: 3px;
+  }
+}
+
 .habit-card-main {
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr) minmax(104px, max-content);
@@ -874,6 +915,18 @@ img {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.habit-card.expanded .mood-sticker {
+  grid-template-rows: 1fr;
+}
+
+.habit-card.expanded .mood-sticker img {
+  width: 36px;
+}
+
+.habit-card.expanded .mood-sticker small {
+  display: none;
 }
 
 .mood-sticker.selected {
@@ -1979,7 +2032,8 @@ img {
   }
 
   .habit-card-main {
-    grid-template-columns: 54px minmax(0, 1fr);
+    grid-template-columns: 54px minmax(0, 1fr) minmax(92px, max-content);
+    align-items: center;
     gap: 9px;
   }
 
@@ -1992,9 +2046,10 @@ img {
   }
 
   .mood-preview {
-    grid-column: 2;
-    justify-self: start;
-    width: fit-content;
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    max-width: min(138px, 38vw);
     min-height: 36px;
     justify-content: flex-start;
     padding: 0 10px;
@@ -2012,6 +2067,47 @@ img {
     padding: 6px;
   }
 
+  .habit-card.expanded {
+    display: grid;
+    grid-template-columns: minmax(82px, 0.46fr) minmax(128px, 1fr);
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .habit-card.expanded .habit-card-main {
+    grid-template-columns: 1fr;
+    place-items: center;
+    min-height: 100%;
+  }
+
+  .habit-card.expanded .habit-card-copy {
+    display: none;
+  }
+
+  .habit-card.expanded .habit-thumb {
+    width: 62px;
+  }
+
+  .habit-card.expanded .mood-preview {
+    display: none;
+  }
+
+  .habit-card.expanded .activity-mood-panel {
+    margin-top: 0;
+    align-self: stretch;
+    place-content: center;
+    padding: 6px;
+  }
+
+  .habit-card.expanded .mood-sticker {
+    min-height: 44px;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    justify-items: center;
+    padding: 4px 3px;
+    font-size: 0.58rem;
+  }
+
   .mood-sticker {
     min-height: 42px;
     grid-template-columns: 28px minmax(0, 1fr);
@@ -2023,6 +2119,10 @@ img {
 
   .mood-sticker img {
     width: 28px;
+  }
+
+  .habit-card.expanded .mood-sticker img {
+    width: 31px;
   }
 
   .month-toggle {
