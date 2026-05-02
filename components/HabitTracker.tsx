@@ -19,6 +19,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -532,10 +533,14 @@ export function HabitTracker() {
 
       <section className="dashboard-grid" aria-label="Habit tracker dashboard">
         <section className="today-panel" aria-labelledby="today-title">
+          <LogoMark className="panel-watermark" decorative />
           <div className="section-header">
-            <div>
-              <span className="section-kicker">Selected day</span>
-              <h2 id="today-title">{formatPrettyDate(selectedDate)}</h2>
+            <div className="section-title-lockup">
+              <LogoMark className="section-logo" decorative />
+              <div>
+                <span className="section-kicker">Selected day</span>
+                <h2 id="today-title">{formatPrettyDate(selectedDate)}</h2>
+              </div>
             </div>
             <div className="progress-ring" style={{ "--progress": `${completionPercent}%` } as CSSProperties}>
               <span>{completionPercent}%</span>
@@ -631,6 +636,7 @@ export function HabitTracker() {
         </section>
 
         <section className={`month-panel${monthOpen ? " open" : " collapsed"}`} aria-labelledby="month-title">
+          <LogoMark className="panel-watermark month" decorative />
           <div className="month-toolbar">
             <button
               className="round-button"
@@ -640,9 +646,12 @@ export function HabitTracker() {
             >
               <ArrowLeft size={18} aria-hidden="true" />
             </button>
-            <div>
-              <span className="section-kicker">Monthly matrix</span>
-              <h2 id="month-title">{formatMonthLabel(visibleMonth)}</h2>
+            <div className="month-title-lockup">
+              <LogoMark className="section-logo" decorative />
+              <div>
+                <span className="section-kicker">Monthly matrix</span>
+                <h2 id="month-title">{formatMonthLabel(visibleMonth)}</h2>
+              </div>
             </div>
             <button
               className="round-button"
@@ -743,10 +752,14 @@ export function HabitTracker() {
             aria-label="Close habit settings"
           />
           <aside className="settings-drawer">
+            <LogoMark className="panel-watermark drawer" decorative />
             <div className="drawer-header">
-              <div>
-                <span className="section-kicker">Tracker setup</span>
-                <h2 id="settings-title">Habit thumbnails and list</h2>
+              <div className="drawer-title-lockup">
+                <LogoMark className="drawer-logo" />
+                <div>
+                  <span className="section-kicker">Tracker setup</span>
+                  <h2 id="settings-title">Habit thumbnails and list</h2>
+                </div>
               </div>
               <button className="round-button" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close">
                 <X size={18} aria-hidden="true" />
@@ -1041,24 +1054,34 @@ function colorWithAlpha(hex: string, alpha: number) {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
-function LogoMark() {
+function LogoMark({ className = "sparkle-logo", decorative = false }: { className?: string; decorative?: boolean }) {
+  const reactId = useId().replace(/:/g, "");
+  const blushId = `${reactId}-logo-blush`;
+  const ribbonId = `${reactId}-logo-ribbon`;
+
   return (
-    <svg className="sparkle-logo" viewBox="0 0 120 120" role="img" aria-label="Sparkle Streak logo">
+    <svg
+      className={className}
+      viewBox="0 0 120 120"
+      role={decorative ? undefined : "img"}
+      aria-label={decorative ? undefined : "Sparkle Streak logo"}
+      aria-hidden={decorative ? true : undefined}
+    >
       <defs>
-        <linearGradient id="logo-blush" x1="18" x2="104" y1="14" y2="110" gradientUnits="userSpaceOnUse">
+        <linearGradient id={blushId} x1="18" x2="104" y1="14" y2="110" gradientUnits="userSpaceOnUse">
           <stop stopColor="#fffafd" />
           <stop offset="0.46" stopColor="#ffe4f1" />
           <stop offset="1" stopColor="#ff8fc2" />
         </linearGradient>
-        <linearGradient id="logo-ribbon" x1="30" x2="90" y1="34" y2="93" gradientUnits="userSpaceOnUse">
+        <linearGradient id={ribbonId} x1="30" x2="90" y1="34" y2="93" gradientUnits="userSpaceOnUse">
           <stop stopColor="#ff4fa3" />
           <stop offset="1" stopColor="#b88cff" />
         </linearGradient>
       </defs>
-      <rect x="10" y="10" width="100" height="100" rx="30" fill="url(#logo-blush)" />
+      <rect x="10" y="10" width="100" height="100" rx="30" fill={`url(#${blushId})`} />
       <path
         d="M37 67c9-24 31-31 50-28-7 6-12 14-14 23 8-2 15-1 21 3-17 6-28 17-34 33-6-9-14-15-24-19 8-2 15-6 21-12-8-2-15-2-20 0Z"
-        fill="url(#logo-ribbon)"
+        fill={`url(#${ribbonId})`}
       />
       <path
         d="M36 55c9 6 18 13 27 24 10-19 21-32 36-43"
