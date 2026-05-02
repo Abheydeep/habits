@@ -44,6 +44,14 @@ const COOKIE_KEY = "habit_tracker_v1";
 const HISTORY_STATE_KEY = "habitTrackerStateV1";
 const emptyDay: DayRecord = { completedHabitIds: [], habitMoods: {} };
 
+type CompletionCelebration = {
+  id: number;
+  habitId: string;
+  mood: MoodKey;
+  tone: string;
+  message: string;
+};
+
 export function HabitTracker() {
   const [tracker, setTracker] = useState<TrackerState>(() => createDefaultState());
   const trackerRef = useRef(tracker);
@@ -57,6 +65,8 @@ export function HabitTracker() {
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
   const [dayOpen, setDayOpen] = useState(true);
   const [monthOpen, setMonthOpen] = useState(true);
+  const [celebration, setCelebration] = useState<CompletionCelebration | null>(null);
+  const celebrationTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const stored = readSavedTrackerState();
@@ -87,6 +97,14 @@ export function HabitTracker() {
     syncMonthState();
     query.addEventListener("change", syncMonthState);
     return () => query.removeEventListener("change", syncMonthState);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (celebrationTimeoutRef.current) {
+        window.clearTimeout(celebrationTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -157,6 +175,42 @@ export function HabitTracker() {
   const monthProgress = useMemo(
     () => countMonthProgress(monthDays, activeHabits, tracker),
     [monthDays, activeHabits, tracker]
+  );
+
+  const triggerCompletionCelebration = useCallback(
+    (habit: Habit, moodOption: (typeof moodOptions)[number]) => {
+      const messagesByMood: Record<MoodKey, string[]> = {
+        tired: ["Soft win saved", "Still showed up", "Gentle point earned"],
+        excited: ["Sparkle secured", "Tiny fireworks", "Little yay logged"],
+        love: ["Heart point saved", "Love logged", "Sweet win tucked in"],
+        productive: ["Done and dusted", "Focus point banked", "Clean tick earned"],
+        relaxed: ["Calm win saved", "Peace point logged", "Easy glow added"]
+      };
+      const messages = messagesByMood[moodOption.key];
+
+      if (celebrationTimeoutRef.current) {
+        window.clearTimeout(celebrationTimeoutRef.current);
+      }
+
+      setCelebration({
+        id: Date.now(),
+        habitId: habit.id,
+        mood: moodOption.key,
+        tone: moodOption.tone ?? habit.color,
+        message: messages[Math.floor(Math.random() * messages.length)]
+      });
+
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate([12, 30, 20]);
+      }
+
+      playCompletionSound(moodOption.tone ?? habit.color);
+
+      celebrationTimeoutRef.current = window.setTimeout(() => {
+        setCelebration(null);
+      }, 1500);
+    },
+    []
   );
 
   const updateHabitMood = useCallback(
@@ -566,7 +620,9 @@ export function HabitTracker() {
                 const moodMenuOpen = expandedHabitId === habit.id;
                 return (
                   <article
-                    className={`habit-card${done ? " done" : ""}${moodMenuOpen ? " expanded" : ""}`}
+                    className={`habit-card${done ? " done" : ""}${moodMenuOpen ? " expanded" : ""}${
+                      celebration?.habitId === habit.id ? " celebrating" : ""
+                    }${habitMood ? ` mood-${habitMood}` : ""}`}
                     key={habit.id}
                     style={{ "--habit": habit.color } as CSSProperties}
                   >
@@ -603,7 +659,11 @@ export function HabitTracker() {
                             style={{ "--mood": mood.tone } as CSSProperties}
                             type="button"
                             onClick={() => {
+                              const shouldCelebrate = habitMood !== mood.key && isCompletionMood(mood.key);
                               updateHabitMood(habit.id, mood.key);
+                              if (shouldCelebrate) {
+                                triggerCompletionCelebration(habit, mood);
+                              }
                               setExpandedHabitId(null);
                             }}
                             aria-label={`${mood.label} mood for ${habit.name}`}
@@ -613,6 +673,14 @@ export function HabitTracker() {
                           </button>
                         ))}
                       </div>
+                    ) : null}
+                    {celebration?.habitId === habit.id ? (
+                      <CompletionBurst
+                        key={celebration.id}
+                        message={celebration.message}
+                        mood={celebration.mood}
+                        tone={celebration.tone}
+                      />
                     ) : null}
                   </article>
                 );
@@ -872,6 +940,29 @@ function StatCard({ label, value }: { label: string; value: string }) {
     <div className="stat-card">
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function CompletionBurst({ message, mood, tone }: { message: string; mood: MoodKey; tone: string }) {
+  return (
+    <div
+      className={`completion-burst mood-${mood}`}
+      style={{ "--celebration": tone } as CSSProperties}
+      aria-live="polite"
+    >
+      <span className="burst-orbit one" />
+      <span className="burst-orbit two" />
+      <span className="burst-orbit three" />
+      <span className="burst-orbit four" />
+      <span className="burst-dot one" />
+      <span className="burst-dot two" />
+      <span className="burst-dot three" />
+      <span className="burst-dot four" />
+      <span className="completion-toast">
+        <Sparkles size={14} aria-hidden="true" />
+        {message}
+      </span>
     </div>
   );
 }
@@ -1234,7 +1325,68 @@ function removeHabitMood(moods: DayRecord["habitMoods"], habitId: string) {
 }
 
 function isHabitComplete(record: DayRecord, habitId: string) {
-  return Boolean(record.habitMoods?.[habitId]);
+  const status = record.habitMoods?.[habitId];
+  return Boolean(status && isCompletionMood(status));
+}
+
+function isCompletionMood(status: MoodKey) {
+  return Boolean(status);
+}
+
+function playCompletionSound(tone: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const AudioContextConstructor =
+      window.AudioContext ??
+      (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextConstructor) {
+      return;
+    }
+
+    const audio = new AudioContextConstructor();
+    const startedAt = audio.currentTime;
+    const baseFrequency = colorToFrequency(tone);
+    const master = audio.createGain();
+    master.gain.setValueAtTime(0.0001, startedAt);
+    master.gain.exponentialRampToValueAtTime(0.045, startedAt + 0.018);
+    master.gain.exponentialRampToValueAtTime(0.0001, startedAt + 0.42);
+    master.connect(audio.destination);
+
+    [1, 1.25, 1.5].forEach((ratio, index) => {
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      const noteStart = startedAt + index * 0.065;
+      oscillator.type = index === 0 ? "sine" : "triangle";
+      oscillator.frequency.setValueAtTime(baseFrequency * ratio, noteStart);
+      gain.gain.setValueAtTime(0.0001, noteStart);
+      gain.gain.exponentialRampToValueAtTime(index === 0 ? 0.2 : 0.12, noteStart + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.22);
+      oscillator.connect(gain);
+      gain.connect(master);
+      oscillator.start(noteStart);
+      oscillator.stop(noteStart + 0.24);
+    });
+
+    void audio.resume();
+    window.setTimeout(() => void audio.close(), 540);
+  } catch {
+    // Audio is a bonus flourish; ignore browser autoplay or hardware limits.
+  }
+}
+
+function colorToFrequency(color: string) {
+  const hex = color.replace("#", "").slice(0, 6);
+  const numeric = Number.parseInt(hex, 16);
+
+  if (!Number.isFinite(numeric)) {
+    return 660;
+  }
+
+  return 560 + (numeric % 190);
 }
 
 function localDateKey(date: Date) {
